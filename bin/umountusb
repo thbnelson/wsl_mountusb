@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# umountusb — WSL USB mounting utility
+# Copyright (c) 2026 Timothy H B Nelson
+# Licensed under the MIT License. See LICENSE file for details.
+mountusb $1 --umount

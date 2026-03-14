@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+# mountusb — WSL USB mounting utility
+# Copyright (c) 2026 Timothy H B Nelson
+# Licensed under the MIT License. See LICENSE file for details.
+
+set -e
+
+if ! grep -qi microsoft /proc/sys/kernel/osrelease; then
+    echo "Error: mountusb is only supported under WSL."
+    exit 1
+fi
+
+usage() {
+    cat <<EOF
+Usage: mountusb [drive] [--list|-ls] [--umount|-u] [--help|-h]
+
+Commands:
+  (no args)        Mount all removable USB drives
+  drive            Mount only the specified drive letter (e.g., 'x' or 'X:')
+  --list, -l       List removable drives and their mount status
+  --umount, -u     Unmount all removable drives (or only the specified one)
+  --help, -h       Show this help message
+
+Notes:
+  - This utility works only under WSL.
+EOF
+    exit 0
+}
+
+# Help mode
+if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    usage
+fi
+
+# Detect removable drives via PowerShell
+get_removable_drives() {
+    powershell.exe -NoProfile -Command \
+      "Get-Volume | Where-Object { \$_.DriveType -eq 'Removable' } | Select-Object -ExpandProperty DriveLetter" \
+      | tr -d '\r'
+}
+
+# Optional single-drive filter
+drive_filter=""
+if [[ "$1" =~ ^[A-Za-z]:?$ ]]; then
+    drive_filter=$(echo "$1" | tr 'a-z' 'A-Z' | tr -d ':')
+    shift
+fi
+
+# Later, when retrieving drives:
+drives=$(get_removable_drives)
+
+# Apply filter if present
+if [ -n "$drive_filter" ]; then
+    drives=$(echo "$drives" | grep -w "$drive_filter" || true)
+fi
+
+# List mode
+if [[ "$1" == "--list" || "$1" == "-ls" || "$1" == "-l" ]]; then
+    drives=$(get_removable_drives)
+
+    if [ -z "$drives" ]; then
+        echo "No removable USB drives detected."
+        exit 0
+    fi
+
+    echo "Detected removable drives:"
+    echo
+
+    for letter in $drives; do
+        mountpoint="/mnt/$(echo "$letter" | tr 'A-Z' 'a-z')"
+
+        if mount | grep -q "aname=drvfs;path=${letter}:"; then
+            status="mounted at $mountpoint"
+        else
+            status="not mounted"
+        fi
+
+        echo "  $letter:  $status"
+    done
+
+    exit 0
+fi
+
+# Unmount mode
+if [[ "$1" == "--umount" || "$1" == "--unmount" || "$1" == "-u" ]]; then
+    drives=$(get_removable_drives)
+
+    if [ -z "$drives" ]; then
+        echo "No removable USB drives detected."
+        exit 0
+    fi
+
+    for letter in $drives; do
+        mountpoint="/mnt/$(echo "$letter" | tr 'A-Z' 'a-z')"
+
+	if mount | grep -q "aname=drvfs;path=${letter}:"; then
+            echo "Unmounting $mountpoint"
+            sudo umount "$mountpoint"
+        else
+            echo "$mountpoint is not mounted"
+        fi
+    done
+
+    exit 0
+fi
+
+# Default: mount mode
+drives=$(get_removable_drives)
+
+if [ -z "$drives" ]; then
+    echo "No removable USB drives detected."
+    exit 0
+fi
+
+for letter in $drives; do
+    mountpoint="/mnt/$(echo "$letter" | tr 'A-Z' 'a-z')"
+    winpath="${letter}:"
+
+    [ -d "$mountpoint" ] || sudo mkdir -p "$mountpoint"
+
+    if mount | grep -q "aname=drvfs;path=${letter}:"; then
+        echo "$winpath already mounted at $mountpoint"
+        continue
+    fi
+
+    echo "Mounting $winpath → $mountpoint"
+    sudo mount -t drvfs "$winpath" "$mountpoint"
+done
