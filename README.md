@@ -1,6 +1,6 @@
 # wsl_mountusb
 
-A small WSL utility to mount removable USB drives into WSL using `drvfs`.
+A small Windows Subsystem for Linux utility to mount removable USB drives into WSL using `drvfs`.
 
 This tool provides a clean, predictable way to manually mount and unmount Windows‑assigned removable drives inside WSL, without interfering with Windows’ own eject logic.
 
